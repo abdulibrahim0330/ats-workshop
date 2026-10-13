@@ -1,0 +1,4 @@
+google-genai
+pdfplumber
+reportlab
+python-dotenv

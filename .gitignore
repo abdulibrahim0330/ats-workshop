@@ -1,0 +1,26 @@
+# Python virtual environments
+.venv/
+venv/
+
+# Environment variables and API keys
+.env
+.env.*
+
+# Allow the public template
+!.env.example
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Generated files
+output/*
+
+# Keep output directory
+!output/.gitkeep
+
+# macOS
+.DS_Store
+
+# VS Code local settings
+.vscode/
