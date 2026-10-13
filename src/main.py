@@ -38,7 +38,7 @@ load_dotenv(BASE_DIR / ".env")
 
 API_KEY = os.getenv("GEMINI_API_KEY")
 
-MODEL = "gemini-3.5-flash-lite"
+MODEL = "gemini-3.8-flash"
 
 WEIGHTS = {
     "keywords": 0.7,
