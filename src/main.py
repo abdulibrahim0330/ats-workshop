@@ -29,18 +29,17 @@ from reportlab.platypus import (
 # 1. CONFIGURATION
 # ==========================================
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent  # Identifies the main project folder
 
-RESUME_PATH = BASE_DIR / "resume.pdf"
-OUTPUT_DIR = BASE_DIR / "output"
+RESUME_PATH = BASE_DIR / "resume.pdf" 
+OUTPUT_DIR = BASE_DIR / "output"                   # Specifies where the generated resumes will be saved
+load_dotenv(BASE_DIR / ".env")                     # Reads the .env file containing the API key
 
-load_dotenv(BASE_DIR / ".env")
+API_KEY = os.getenv("GEMINI_API_KEY")             # Retrieves the key from that file
 
-API_KEY = os.getenv("GEMINI_API_KEY")
+MODEL = "gemini-3.8-flash"                         # Specifies which Gemini model the application requests
 
-MODEL = "gemini-3.8-flash"
-
-WEIGHTS = {
+WEIGHTS = {                                        # Establishes how the ATS score is calculated
     "keywords": 0.7,
     "completeness": 0.3
 }
@@ -50,23 +49,23 @@ WEIGHTS = {
 # 2. GEMINI CLIENT
 # ==========================================
 
-def call_llm(prompt):
+def call_llm(prompt):   # Sends instructions to Gemini and receive a response
     """Send a prompt to Gemini and retry temporary server failures."""
 
     if not API_KEY:
         raise ValueError("GEMINI_API_KEY is missing.")
 
-    client = genai.Client(api_key=API_KEY)
+    client = genai.Client(api_key=API_KEY)     # Creates an object that allows the application to communicate with Gemini.
 
     max_attempts = 5
 
     for attempt in range(max_attempts):
-        try:
-            response = client.models.generate_content(
-                model=MODEL,
-                contents=prompt,
+        try:                                                 # Actual API call
+            response = client.models.generate_content(       # client.models.generate_content() send a request to Gemini
+                model=MODEL,                                 # Specifies which model to use
+                contents=prompt,                             # Sends the instructions/information
                 config=types.GenerateContentConfig(
-                    response_mime_type="application/json"
+                    response_mime_type="application/json"    # Requests a JSON-formatted response
                 )
             )
 
@@ -78,12 +77,12 @@ def call_llm(prompt):
             if raw.startswith("```"):
                 raw = raw.strip("`").removeprefix("json").strip()
 
-            return json.loads(raw)
-
-        except ServerError as error:
-            if error.code != 503 or attempt == max_attempts - 1:
+            return json.loads(raw)                     # Gemini returns text containing JSON
+                                                       # json.loads() converts that text into a Python object, generally a dictionary
+        except ServerError as error:                  # This catches certain errors returned by the Gemini service.
+            if error.code != 503 or attempt == max_attempts - 1:        # For temporary 503 errors, the function waits and retries.
                 raise
-
+                                                        # Prevents the entire program from failing immediately when Gemini is temporarily overloaded.
             delay = min(2 ** (attempt + 1), 30) + random.uniform(0, 1)
 
             print(
@@ -99,7 +98,7 @@ def call_llm(prompt):
 # 3. PDF TEXT EXTRACTION
 # ==========================================
 
-def extract_text(pdf_path):
+def extract_text(pdf_path):      # Reads an existing PDF and extracts its text
     """Extract text from every page of a PDF."""
 
     pages = []
@@ -107,9 +106,9 @@ def extract_text(pdf_path):
     with pdfplumber.open(pdf_path) as pdf:
 
         for page in pdf.pages:
-            pages.append(page.extract_text() or "")
+            pages.append(page.extract_text() or "")          # Opens pdf and examines each page. The extracted text gets added to a list
 
-    text = "\n".join(pages).strip()
+    text = "\n".join(pages).strip()         # Combines the text from all pages into one string. Which is sent to Gemini
 
     if not text:
         raise ValueError(
@@ -123,6 +122,7 @@ def extract_text(pdf_path):
 # 4. RESUME SCHEMA
 # ==========================================
 
+# Describing how the information should be organized
 SCHEMA = """{
     "name": string,
     "email": string or null,
@@ -152,6 +152,9 @@ SCHEMA = """{
 # 5. EXTRACTION PROMPT
 # ==========================================
 
+# Defines the instructions for Gemini's first task
+# Using the first prompt to just tell Gemini how to interpret the resume
+# {schema} and {resume_text} are placeholders until Python replaces them with the actual schema and resume text
 EXTRACT_PROMPT = """You are a resume parser.
 
 Convert the resume below into structured JSON.
@@ -175,6 +178,10 @@ RESUME:
 # ==========================================
 # 6. TARGET JOB
 # ==========================================
+
+
+# Describing the position the resume will be compared to
+# If you want to use this program later on, you can tailor this section for any job you're applying to
 
 JOB = {
     "title": "Junior Software Engineer",
@@ -203,11 +210,17 @@ JOB = {
         "Agile"
     ]
 }
+# The keywords give Python specific terms to search for when calculating the ATS score.
+# The description gives Gemini context for rewriting.
 
 
 # ==========================================
 # 7. TAILORING PROMPT
 # ==========================================
+
+# Gives Gemini instructions for rewriting the resume 
+# Rewrites the resume to emphasize qualifications
+# relevant to the target job description.
 
 TAILOR_PROMPT = """You are an expert resume writer.
 
@@ -241,7 +254,7 @@ CANDIDATE RESUME:
 # 8. KEYWORD COVERAGE
 # ==========================================
 
-def keyword_coverage(resume, keywords):
+def keyword_coverage(resume, keywords):                    # Measures how many target-job keywords appear in the resume
 
     text = json.dumps(resume).lower()
 
@@ -267,7 +280,7 @@ def keyword_coverage(resume, keywords):
 # 9. COMPLETENESS
 # ==========================================
 
-def completeness(resume):
+def completeness(resume):               # Checks whether the resume contains important information.
 
     checks = {
         "has name": bool(resume.get("name")),
@@ -288,12 +301,20 @@ def completeness(resume):
 
     return score, checks
 
+# Keyword coverage checks how closely the resume matches the job
+# Completeness checks whether the resume contains the basic information and sections we expect
+
+
 
 # ==========================================
 # 10. ATS SCORE
 # ==========================================
 
-def ats_score(resume, job):
+
+# Disclaimer: This is not necessarily how real ATS's calculate scores. Just used for the workshop!
+# Real ATSs vary and some don't calculate compatibility scores at all
+
+def ats_score(resume, job):           # Simplified ATS scoring system to demonstrate how we can evaluate a resume using Python
 
     kw, found, missing = keyword_coverage(
         resume,
@@ -324,6 +345,9 @@ def ats_score(resume, job):
 # ==========================================
 # 11. PDF STYLES
 # ==========================================
+
+
+# Controls how the final resume looks using ReportLab
 
 NAME = ParagraphStyle(
     "name",
@@ -366,6 +390,8 @@ ROLE = ParagraphStyle(
 # 12. ESCAPE SPECIAL CHARACTERS
 # ==========================================
 
+# Makes text safer to insert into ReportLab paragraphs. 
+# Formatting helper
 def esc(text):
 
     return (
@@ -380,9 +406,17 @@ def esc(text):
 # 13. PDF GENERATION
 # ==========================================
 
+
+# Creates the final pdf using the tailored resume dictionary
+""" 
+After Gemini finishes tailoring the content, 
+ReportLab takes that information and constructs an actual PDF document. 
+We don't need Gemini to generate the PDF itself.
+
+"""
 def build_pdf(resume, out_path):
 
-    doc = SimpleDocTemplate(
+    doc = SimpleDocTemplate(         # Initializes a PDF document using US Letter paper and specified margins
         str(out_path),
         pagesize=letter,
         leftMargin=0.8 * inch,
@@ -484,6 +518,19 @@ def build_pdf(resume, out_path):
 # 14. MAIN PROGRAM
 # ==========================================
 
+
+
+
+""" 
+The filename doesn't matter as long as you specify the correct file path. 
+For this workshop, we'll use resume_clean.pdf 
+because that's the sample included in the repository. 
+If you want to use your own resume, 
+place it in the samples folder and replace resume_clean.pdf 
+in the command with your filename
+"""
+
+# Coordinates all the other functions
 def main():
 
     if len(sys.argv) != 2:
@@ -599,3 +646,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# Use: python src/main.py samples/<YOUR_PDF_NAME>.pdf to execute
