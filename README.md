@@ -95,8 +95,3 @@ Generated files are saved in the `output/` directory.
 - API usage limits depend on your Google project.
 - The ATS score is a custom educational metric.
 - Always review generated resumes for accuracy.
-
-### Canva
-```bash
-https://canva.link/wjyjqndklu7qcsl
-```
